@@ -1,0 +1,9 @@
+order_id,customer_id,category,amount,quantity,region
+1,101,Electronics,1200,1,West
+2,102,Electronics,800,1,West
+3,103,Grocery,120,6,East
+4,104,Grocery,60,3,East
+5,105,Fashion,300,2,South
+6,106,Fashion,150,1,South
+7,107,Electronics,500,1,North
+8,108,Grocery,200,10,West

@@ -1,0 +1,13 @@
+# .air.toml
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "make start"       # This runs your Makefile's start target every time
+bin = "tmp/main"         # Dummy binary path (unused, but required by Air)
+include_ext = ["go"]
+exclude_dir = ["data1", "data2", "data3", "tmp", "logs"]
+delay = 1000             # Wait 1s after the last change before restarting
+
+[log]
+time = true
