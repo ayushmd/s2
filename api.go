@@ -753,6 +753,7 @@ func (fs *FileStore) StartApi(addr string) error {
 	r := mux.NewRouter()
 	r.HandleFunc("/health", healthCheck).Methods("GET")
 	r.HandleFunc("/metrics", MetricsHandler).Methods("GET")
+	r.HandleFunc("/cluster", clusterDashboard).Methods("GET")
 
 	// My S2 API's Below
 	r.HandleFunc("/s2/nodes", fs.ListNodes).Methods("GET")

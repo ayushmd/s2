@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cluster nodes · metrics</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3d8bfd;
+      --good: #3ecf8e;
+      --warn: #f5a623;
+      --bad: #f56565;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .layout {
+      width: 100%;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+    header {
+      padding-top: 1.25rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 0.35rem 0 0;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+    main.layout {
+      padding-top: 1.5rem;
+      padding-bottom: 1.5rem;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.8125rem;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      display: inline-block;
+    }
+    .status-dot.ok { background: var(--good); }
+    .status-dot.err { background: var(--bad); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.1rem 1.25rem;
+    }
+    .card h2 {
+      margin: 0 0 0.25rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .card .addr {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      word-break: break-all;
+      margin-bottom: 1rem;
+    }
+    .metric {
+      margin-bottom: 0.85rem;
+    }
+    .metric:last-child { margin-bottom: 0; }
+    .metric label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    .metric label span:last-child {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      overflow: hidden;
+    }
+    .bar > i {
+      display: block;
+      height: 100%;
+      border-radius: 3px;
+      background: var(--accent);
+      max-width: 100%;
+    }
+    .bar > i.warn { background: var(--warn); }
+    .bar > i.bad { background: var(--bad); }
+    .empty, .error-box {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+    .error-box { color: var(--bad); border-color: rgba(245, 101, 101, 0.35); }
+    footer {
+      padding-top: 1rem;
+      padding-bottom: 2rem;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="layout">
+      <h1>Cluster nodes</h1>
+      <p>Live metrics of all the nodes in the cluster on our <b>S3-compatible backend.</b></p>
+    </div>
+  </header>
+  <main class="layout">
+    <div class="toolbar">
+      <span class="status-dot" id="poll-dot" aria-hidden="true"></span>
+      <span id="poll-msg">Loading…</span>
+      <span>·</span>
+      <span>Refresh every 5s</span>
+    </div>
+    <div id="root"></div>
+  </main>
+  <footer>
+    <div class="layout">
+      Data source: leader aggregates per-node <code>GET /metrics</code> from each Raft voter.
+    </div>
+  </footer>
+  <script>
+    const root = document.getElementById("root");
+    const pollDot = document.getElementById("poll-dot");
+    const pollMsg = document.getElementById("poll-msg");
+
+    function barClass(pct) {
+      if (pct >= 90) return "bad";
+      if (pct >= 75) return "warn";
+      return "";
+    }
+
+    function render(nodes) {
+      const ids = Object.keys(nodes).sort();
+      if (ids.length === 0) {
+        root.innerHTML = '<div class="empty">No node metrics yet. Only the leader publishes this view; wait for the next metrics interval (~10s).</div>';
+        return;
+      }
+      root.innerHTML = '<div class="grid">' + ids.map(function (id) {
+        var m = nodes[id] || {};
+        var addr = m.addr || id;
+        var cpu = typeof m.cpu_percent === "number" ? m.cpu_percent : 0;
+        var memPct = typeof m.mem_pct === "number" ? m.mem_pct : 0;
+        var diskPct = typeof m.disk_pct === "number" ? m.disk_pct : 0;
+        var memLine = (m.mem_used != null && m.mem_total != null)
+          ? (m.mem_used + " / " + m.mem_total + " MiB")
+          : "—";
+        var diskLine = (m.disk_used != null && m.disk_total != null)
+          ? (m.disk_used + " / " + m.disk_total + " GiB")
+          : "—";
+        return (
+          '<article class="card">' +
+            '<h2>' + escapeHtml(id) + '</h2>' +
+            '<div class="addr">' + escapeHtml(String(addr)) + '</div>' +
+            '<div class="metric">' +
+              '<label><span>CPU</span><span>' + cpu.toFixed(1) + '%</span></label>' +
+              '<div class="bar"><i class="' + barClass(cpu) + '" style="width:' + Math.min(100, cpu) + '%"></i></div>' +
+            '</div>' +
+            '<div class="metric">' +
+              '<label><span>Memory</span><span>' + memPct.toFixed(1) + '% · ' + escapeHtml(memLine) + '</span></label>' +
+              '<div class="bar"><i class="' + barClass(memPct) + '" style="width:' + Math.min(100, memPct) + '%"></i></div>' +
+            '</div>' +
+            '<div class="metric">' +
+              '<label><span>Disk /</span><span>' + diskPct.toFixed(1) + '% · ' + escapeHtml(diskLine) + '</span></label>' +
+              '<div class="bar"><i class="' + barClass(diskPct) + '" style="width:' + Math.min(100, diskPct) + '%"></i></div>' +
+            '</div>' +
+          '</article>'
+        );
+      }).join("") + '</div>';
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    async function load() {
+      pollDot.classList.remove("ok", "err");
+      try {
+        var res = await fetch("/s2/nodes", { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        var data = await res.json();
+        if (data == null || typeof data !== "object") throw new Error("Bad JSON");
+        render(data);
+        pollDot.classList.add("ok");
+        pollMsg.textContent = "Updated " + new Date().toLocaleTimeString();
+      } catch (e) {
+        pollDot.classList.add("err");
+        pollMsg.textContent = "Request failed";
+        root.innerHTML = '<div class="error-box">Could not load <code>/s2/nodes</code>. Use the leader URL (same host as this page).<br><small>' + escapeHtml(e.message || String(e)) + "</small></div>";
+      }
+    }
+
+    load();
+    setInterval(load, 5000);
+  </script>
+</body>
+</html>

@@ -23,7 +23,7 @@ const BlockSize = 128 * 1024 * 1024
 const WindowSize = 16 * 1024 * 1024
 const WindowPerBlock = BlockSize / WindowSize
 const MaxWorker = 20
-const MetricsInterval = 10 // seconds
+const MetricsInterval = 5 // seconds
 
 func main() {
 	// Command line flags
